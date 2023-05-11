@@ -1,1 +1,86 @@
-insert("mdr")
+#include <WiFiEsp.h>
+#include <WiFiEspClient.h>
+#include <WiFiEspServer.h>
+#include <WiFiEspUdp.h>
+#include <SPI.h>
+#include <ArduinoJson.h> // Ajout de la librairie ArduinoJson
+
+// Définition des paramètres de connexion WiFi
+char ssid[] = "votre_ssid";  // Le nom de votre réseau WiFi
+char pass[] = "votre_mdp";  // Le mot de passe de votre réseau WiFi
+int status = WL_IDLE_STATUS;
+
+// Définition des paramètres de connexion à MongoDB
+const char* host = "192.168.1.100";  // L'adresse IP de votre serveur MongoDB
+const int port = 27017;  // Le port utilisé par MongoDB
+const char* user = "username";  // Le nom d'utilisateur pour se connecter à MongoDB
+const char* password = "password";  // Le mot de passe pour se connecter à MongoDB
+const char* db_name = "test";  // Le nom de la base de données à utiliser
+const char* collection_name = "data";  // Le nom de la collection à utiliser
+
+// Création d'un objet WiFiEspClient pour la connexion à MongoDB
+WiFiEspClient mongoClient;
+
+// Définition de l'objet JsonDocument pour stocker les données à envoyer à MongoDB
+StaticJsonDocument<200> doc;
+
+void setup() {
+  // Initialisation de la communication série
+  Serial.begin(115200);
+
+  // Connexion au réseau WiFi
+  WiFi.init(&Serial);
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("WiFi shield non détecté");
+    while (true);
+  }
+  while (status != WL_CONNECTED) {
+    Serial.print("Connexion à ");
+    Serial.print(ssid);
+    status = WiFi.begin(ssid, pass);
+    delay(10000);
+  }
+  Serial.println("Connexion WiFi établie");
+
+  // Connexion à MongoDB
+  if (mongoClient.connect(host, port)) {
+    Serial.println("Connexion à MongoDB établie");
+    // Authentification auprès de MongoDB
+    if (mongoClient.authenticate(user, password, db_name)) {
+      Serial.println("Authentification auprès de MongoDB réussie");
+    } else {
+      Serial.println("Erreur d'authentification auprès de MongoDB");
+    }
+  } else {
+    Serial.println("Erreur de connexion à MongoDB");
+  }
+}
+
+void loop() {
+  // Génération de données aléatoires à envoyer à MongoDB
+  float temp = random(10, 30);
+  float hum = random(40, 80);
+  
+  // Stockage des données dans l'objet JsonDocument
+  doc["temperature"] = temp;
+  doc["humidite"] = hum;
+  
+  // Convertion de l'objet JsonDocument en chaîne de caractères au format JSON
+  String jsonString;
+  serializeJson(doc, jsonString);
+  Serial.println(jsonString);
+
+  // Envoi des données à MongoDB
+  if (mongoClient.connected()) {
+    // Ouverture de la collection
+    MongoCollection collection = mongoClient.getCollection(db_name, collection_name);
+    // Insertion du document dans la collection
+    collection.insertOne(jsonString);
+    Serial.println("Données envoyées à MongoDB");
+  } else {
+    Serial.println("Erreur de connexion à MongoDB");
+  }
+
+  // Attente avant d'envoyer de nouvelles données
+  delay(5000);
+}
